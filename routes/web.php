@@ -31,4 +31,31 @@ Route::prefix('api')->group(function(){
     Route::post('reg','ApiController@reg')->name('reg');
     //登录接口
     Route::post('loginCheck','ApiController@loginCheck')->name('loginCheck');
+
+    Route::get('sms','ApiController@sms');
+    //添加地址
+    Route::post('addAddress','ApiController@addAddress');
+    //地址列表
+    Route::get('addressList','ApiController@addressList');
+    //回显地址
+    Route::get('address','ApiController@address');
+    //修改保存
+    Route::post('editAddress','ApiController@editAddress');
+    //保存购物车
+    Route::post('addCart','ApiController@addCart');
+    //获取购物车数据
+    Route::get('cart','ApiController@cart');
+    //生成订单接口
+    Route::post('addOrder','ApiController@addOrder');
+    //获取指定的订单接口
+    Route::get('order','ApiController@order');
+    //获取我的订单列表接口
+    Route::get('orderList','ApiController@orderList');
+    //修改密码
+    Route::post('changePassword','ApiController@changePassword');
+    //忘记密码
+    Route::post('forgetPassword','ApiController@forgetPassword');
 });
+
+Route::get('test','MemberController@test');
+
