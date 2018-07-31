@@ -20,12 +20,12 @@ use Illuminate\Support\Facades\Validator;
 
 class ApiController extends Controller
 {
-    public function __construct()
-    {
-        $this->middleware('auth', [
-            'only' => ['addAddress', 'addressList', 'address', 'editAddress', 'addCart', 'cart'],
-        ]);
-    }
+//    public function __construct()
+//    {
+//        $this->middleware('auth', [
+//            'only' => ['addAddress', 'addressList', 'address', 'editAddress', 'addCart', 'cart'],
+//        ]);
+//    }
 
     //商家列表接口
     public function shopList(Request $request)
@@ -58,6 +58,10 @@ class ApiController extends Controller
         $shop_id = $request->id;
 
         $shop = Shop::find($shop_id);
+        //如果用户提交的id的商铺不存在
+        if($shop==null){
+            return ["status"=>"false","message"=>"该商铺不存在"];
+        }
 
         unset($shop['shop_category_id'], $shop['status'], $shop['created_at'], $shop['updated_at']);
         $shop['distance'] = mt_rand(10, 2000);
@@ -243,6 +247,12 @@ class ApiController extends Controller
 
         if (Auth::attempt(['username' => $request->name, 'password' => $request->password])) {
 
+            $memberinfo=Auth::user();
+            if($memberinfo->status!=1){
+                Auth::logout();
+                return json_encode(["status" => "false", "message" => "该账号被禁用"]);
+            }
+
             $rpone = ['status' => "true", 'message' => '登录成功', 'user_id' => Auth()->id(), 'username' => Auth::user()->username];
             return json_encode($rpone);
 
@@ -314,6 +324,10 @@ class ApiController extends Controller
         $id = $request->id;
 
         $address = Address::find($id, ['id', 'county', 'province', 'address', 'name', 'tel', 'city']);
+        //验证地址是否存在
+        if($address==null){
+            return ["status"=>"false","message"=>"该地址不存在"];
+        }
 
         $address->area = $address->county;
         $address->detail_address = $address->address;
@@ -431,17 +445,16 @@ class ApiController extends Controller
 
         $shoppingcarts = Shopping_cart::where('member_id', $member_id)->get();//得到用户购买的goods_id 和数量
 
-
         $total = 0;//价格
-        foreach ($shoppingcarts as $cartOne) {
-            $shop_id = $cartOne->goods->shop_id;
-            $total += $cartOne->goods->goods_price * $cartOne->amount;
-        }
-
+        $shop_id=0;
 
         //根据传入的地址id获取地址信息
 
         $orderinfo = Address::where('id', $request->address_id)->first(['province', 'city', 'county', 'address', 'tel', 'name']);
+        if($orderinfo==null){
+            return ["status"=>"false","message"=>"该地址不存在"];
+        }
+
         $orderinfo['member_id'] = $member_id;
         $orderinfo['shop_id'] = $shop_id;
         $orderinfo['sn'] =date('Ymd').mt_rand(100000,999999);
@@ -467,22 +480,23 @@ class ApiController extends Controller
                 $order_goods[$cartOne->goods->id]['amount'] = $cartOne->amount;
                 $order_goods[$cartOne->goods->id]['goods_id'] = $cartOne->goods_id;
                 $order_goods[$cartOne->goods->id]['order_id'] = $order_id;
+                $shop_id = $cartOne->goods->shop_id;
+                $total += $cartOne->goods->goods_price * $cartOne->amount;
+
             }
 
-
             OrderGood::insert($order_goods);
+
+            $orderOne->update(['shop_id'=>$shop_id,'total'=>$total]);
 
             DB::commit();
 
         } catch (\Exception $e) {
             DB::rollBack();
-            dd($e);
             return ["status" => "false", "message" => "失败"];
         }
 
-
         return ["status" => "true", "message" => "添加成功", "order_id" => $order_id];
-
 
     }
 
@@ -490,6 +504,11 @@ class ApiController extends Controller
     public function order(Request $request)
     {
         $order = Order::find($request->id, ['sn', 'created_at', 'status', 'shop_id', 'id', 'address', 'total']);
+
+        if($order==null){
+            return ["status"=>"false","message"=>"该订单不存在"];
+        }
+
         $order->order_code = $order->sn;
         $order->order_birth_time = date('Y-m-d H:i', strtotime($order->created_at));
         $order->order_status = $order->status == 0 ? '待支付' : '已支付';
