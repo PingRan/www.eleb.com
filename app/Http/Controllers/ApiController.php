@@ -11,6 +11,8 @@ use App\Models\Order;
 use App\Models\OrderGood;
 use App\Models\Shop;
 use App\Models\Shopping_cart;
+use App\Models\ShopUser;
+use App\User;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\DB;
@@ -88,7 +90,7 @@ class ApiController extends Controller
         //查询店铺的菜品分类
         $menucategories = MenuCategory::where('shop_id', $shop_id)->get();
         foreach ($menucategories as &$menucategory) {
-            $menus = Menu::where('category_id', $menucategory->id)->get();
+            $menus = Menu::where('category_id', $menucategory->id)->where('status',1)->get();
 
             foreach ($menus as &$menu) {
                 $goods_id = $menu['id'];
@@ -205,9 +207,6 @@ class ApiController extends Controller
         // fixme 选填: 启用https
         // ,true
         );
-
-//        \Illuminate\Support\Facades\Redis::set('code' . $request->tel, json_decode($params['TemplateParam'])->code);
-//        \Illuminate\Support\Facades\Redis::expire('code' . $request->tel, 300);
 
         if (isset($content->Code) && $content->Code == 'OK') {
 
@@ -442,7 +441,6 @@ class ApiController extends Controller
     {
 
         $member_id = Auth::id();
-
         $shoppingcarts = Shopping_cart::where('member_id', $member_id)->get();//得到用户购买的goods_id 和数量
 
         $total = 0;//价格
@@ -495,7 +493,13 @@ class ApiController extends Controller
             DB::rollBack();
             return ["status" => "false", "message" => "失败"];
         }
+       $shop_name=Shop::find($shop_id)->shop_name;
+       $user_id=ShopUser::where('shop_id',$shop_id)->first()->user_id;
+       $userEmail=User::find($user_id)->email;
 
+        //$this->SmsNotice($shop_name);
+        $title='订单通知';
+        $this->sendEmail($title,$userEmail);
         return ["status" => "true", "message" => "添加成功", "order_id" => $order_id];
 
     }
@@ -633,4 +637,79 @@ class ApiController extends Controller
             "message"=>"重置成功,请登录",
         ];
     }
+    //短信通知接口
+    public function SmsNotice($shop_name)
+    {
+        $memberTel=Auth::user()->tel;
+
+        $params = array();
+
+        // *** 需用户填写部分 ***
+
+        // fixme 必填: 请参阅 https://ak-console.aliyun.com/ 取得您的AK信息
+        $accessKeyId = "LTAIUcSZ77jpzuu1";
+        $accessKeySecret = "Jq7t2I13dnQ9zh3NBh0jMbK7L6Qqle";
+
+        // fixme 必填: 短信接收号码
+        $params["PhoneNumbers"] = $memberTel;
+
+        // fixme 必填: 短信签名，应严格按"签名名称"填写，请参考: https://dysms.console.aliyun.com/dysms.htm#/develop/sign
+        $params["SignName"] = "冉喜平";
+
+        // fixme 必填: 短信模板Code，应严格按"模板CODE"填写, 请参考: https://dysms.console.aliyun.com/dysms.htm#/develop/template
+        $params["TemplateCode"] = "SMS_141110007";
+
+        // fixme 可选: 设置模板参数, 假如模板中存在变量需要替换则为必填项
+        $params['TemplateParam'] = Array(
+            "name" =>$shop_name,
+            //"product" => "阿里通信"
+        );
+
+        // fixme 可选: 设置发送短信流水号
+        //$params['OutId'] = "12345";
+
+        // fixme 可选: 上行短信扩展码, 扩展码字段控制在7位或以下，无特殊需求用户请忽略此字段
+        //$params['SmsUpExtendCode'] = "1234567";
+
+
+        // *** 需用户填写部分结束, 以下代码若无必要无需更改 ***
+        if (!empty($params["TemplateParam"]) && is_array($params["TemplateParam"])) {
+            $params["TemplateParam"] = json_encode($params["TemplateParam"], JSON_UNESCAPED_UNICODE);
+        }
+
+        // 初始化SignatureHelper实例用于设置参数，签名以及发送请求
+        $helper = new \App\SignatureHelper();
+
+        // 此处可能会抛出异常，注意catch
+        $content = $helper->request(
+            $accessKeyId,
+            $accessKeySecret,
+            "dysmsapi.aliyuncs.com",
+            array_merge($params, array(
+                "RegionId" => "cn-hangzhou",
+                "Action" => "SendSms",
+                "Version" => "2017-05-25",
+            ))
+        // fixme 选填: 启用https
+        // ,true
+        );
+
+        if (isset($content->Code) && $content->Code == 'OK') {
+
+            return json_encode(["status" => "1", "message" => "短信通知已下达,请注意查收"]);
+        }
+        return json_encode(["status" => "false", "message" => "短信通知失败"]);
+
+    }
+    //订单产生时发送email给商家
+
+    public function sendEmail($title,$userEmail)
+    {
+        $content=date('Y-m-d H:i:s').'您的店铺有新的订单,请尽快处理';
+        $r =\Illuminate\Support\Facades\Mail::send('Email', ['content'=>$content], function ($message)use($title,$userEmail) {
+            $message->from('pingran1993@163.com', 'eleb平台');
+            $message->to([$userEmail])->subject($title);
+        });
+    }
+
 }
