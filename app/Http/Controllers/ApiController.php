@@ -497,9 +497,11 @@ class ApiController extends Controller
        $user_id=ShopUser::where('shop_id',$shop_id)->first()->user_id;
        $userEmail=User::find($user_id)->email;
 
-        //$this->SmsNotice($shop_name);
+        $this->SmsNotice($shop_name);
         $title='订单通知';
-        $this->sendEmail($title,$userEmail);
+
+        //$this->sendEmail($title,$userEmail);
+
         return ["status" => "true", "message" => "添加成功", "order_id" => $order_id];
 
     }
