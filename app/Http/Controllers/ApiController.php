@@ -500,7 +500,7 @@ class ApiController extends Controller
         $this->SmsNotice($shop_name);
         $title='订单通知';
 
-        //$this->sendEmail($title,$userEmail);
+        $this->sendEmail($title,$userEmail);
 
         return ["status" => "true", "message" => "添加成功", "order_id" => $order_id];
 
