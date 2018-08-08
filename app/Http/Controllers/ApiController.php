@@ -2,6 +2,7 @@
 
 namespace App\Http\Controllers;
 
+use App\Http\SphinxClient;
 use App\Models\Address;
 use App\Models\evaluate;
 use App\Models\Member;
@@ -29,15 +30,55 @@ class ApiController extends Controller
 //        ]);
 //    }
 
+
+    public function search($keyword)
+    {
+        $cl = new SphinxClient ();
+        $cl->SetServer ( '127.0.0.1', 9312);
+        $cl->SetConnectTimeout ( 10 );
+        $cl->SetArrayResult ( true );
+
+        $cl->SetMatchMode ( SPH_MATCH_EXTENDED2);
+        $cl->SetLimits(0, 1000);
+        $info = $keyword;
+        $res = $cl->Query($info, 'shop');//shopstore_search
+        $result=[];
+        if(isset($res['matches'])){
+            array_map(function($value)use(&$result){
+                $result[]=$value['id'];
+            },$res['matches']);
+        }
+
+        return $result;
+    }
     //商家列表接口
     public function shopList(Request $request)
     {
-        $shoplist = Shop::all();
-        if ($request->keyword) {
-            $shoplist = Shop::where('shop_name', 'like', "%{$request->keyword}%")->get();
+
+        $keyword=$request->keyword;
+
+        if($keyword){
+
+            $where_id=$this->search($keyword);
+
+            $shopList=Shop::where('status',1)->find($where_id);
+
+        }else{
+
+            //先验证redis中是否有缓存的店铺列表信息;
+            $shopList=Redis::get('shopList');
+
+            if($shopList!=null){
+
+                return $shopList;
+            }
+
+        }
+        if(!$keyword||!$shopList){
+            $shopList = Shop::where('status',1)->get();
         }
 
-        foreach ($shoplist as &$list) {
+        foreach ($shopList as &$list) {
             unset($list['shop_category_id'], $list['status'], $list['created_at'], $list['updated_at']);
 
             $list['brand'] = $list['brand'] ? true : false;
@@ -50,7 +91,15 @@ class ApiController extends Controller
             $list['estimate_time'] = mt_rand(10, 120);
 
         }
-        return json_encode($shoplist);
+        //将数据存入redis中
+        $listData=json_encode($shopList);//转成json字符串存入
+
+        if($request->keyword){
+
+            return $listData;
+        }
+        Redis::set('shopList',$listData,24*3600);
+        return $listData;
     }
 
     //指定商家接口
@@ -58,6 +107,14 @@ class ApiController extends Controller
     {
 
         $shop_id = $request->id;
+
+        //先判断redis中的商家缓存信息是否存在 存在返回 不存在查询  用hash将用户访问过的所有商家信息存入redis中
+        $shopPitch=Redis::hget('shopPitch',$shop_id);
+
+        if($shopPitch!=null){
+            return $shopPitch;
+        }
+
 
         $shop = Shop::find($shop_id);
         //如果用户提交的id的商铺不存在
@@ -103,7 +160,12 @@ class ApiController extends Controller
             unset($menucategory['shop_id'], $menucategory['id'], $menucategory['created_at'], $menucategory['updated_at']);
         }
         $shop['commodity'] = $menucategories;
-        return json_encode($shop);
+        //存入redis中
+        $shopPitch=json_encode($shop);
+        //存入hash集合中;
+        Redis::hset('shopPitch',$shop_id,$shopPitch);
+
+        return $shopPitch;
 
     }
 
