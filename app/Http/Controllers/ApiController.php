@@ -20,15 +20,16 @@ use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Hash;
 use Illuminate\Support\Facades\Redis;
 use Illuminate\Support\Facades\Validator;
-
+use App\Jobs\SendSms;
+use App\Jobs\sendNotice;
 class ApiController extends Controller
 {
-//    public function __construct()
-//    {
-//        $this->middleware('auth', [
-//            'only' => ['addAddress', 'addressList', 'address', 'editAddress', 'addCart', 'cart'],
-//        ]);
-//    }
+    public function __construct()
+    {
+        $this->middleware('auth', [
+            'only' => ['addAddress', 'addressList', 'address', 'editAddress', 'addCart', 'cart'],
+        ]);
+    }
 
 
     public function search($keyword)
@@ -284,6 +285,12 @@ class ApiController extends Controller
 
     }
 
+//    public function sms(Request $request)
+//    {
+//       $Jobs=new SendSms($request->tel);
+//       $this->dispatch($Jobs);
+//        return json_encode(["status" => "1", "message" => "获取短信验证码成功"]);
+//    }
     //登录接口
     public function loginCheck(Request $request)
     {
@@ -558,11 +565,16 @@ class ApiController extends Controller
        $shop_name=Shop::find($shop_id)->shop_name;
        $user_id=ShopUser::where('shop_id',$shop_id)->first()->user_id;
        $userEmail=User::find($user_id)->email;
+       $tel=Auth::user()->tel;
+       $SmsJob=new SendSms($shop_name,$tel);
+       $this->dispatch($SmsJob);
+       //$this->SmsNotice($shop_name);
 
-        $this->SmsNotice($shop_name);
         $title='订单通知';
+        $Njobs=new sendNotice($title,$userEmail);
+        $this->dispatch($Njobs);
 
-        $this->sendEmail($title,$userEmail);
+//        $this->sendEmail($title,$userEmail);
 
         return ["status" => "true", "message" => "添加成功", "order_id" => $order_id];
 
